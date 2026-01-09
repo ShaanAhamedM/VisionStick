@@ -41,16 +41,17 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
 
-    // CameraX Core Libraries (Converted to Kotlin DSL)
+    // CameraX (The Eyes)
     val cameraxVersion = "1.3.0"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-video:$cameraxVersion")
-
-    // THIS IS THE MISSING ONE causing your error:
     implementation("androidx.camera:camera-view:$cameraxVersion")
-
-    // Extensions
     implementation("androidx.camera:camera-extensions:$cameraxVersion")
+
+    // TensorFlow Lite (The Brain) - THESE ARE NEW
+    implementation("org.tensorflow:tensorflow-lite-task-vision:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.9.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 }
