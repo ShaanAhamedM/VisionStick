@@ -8,12 +8,15 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
-import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -23,111 +26,122 @@ public class MainActivity extends AppCompatActivity {
     private TextToSpeech textToSpeech;
     private SpeechRecognizer speechRecognizer;
     private Intent speechIntent;
-    private boolean isListening = false;
+    private boolean isListening = false; // Flag to prevent double taps
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 1. Check Audio Permissions (Critical for Android 10+)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+        // 1. Critical Permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.CAMERA
+            }, 1);
         }
 
+        // 2. UI Hookup
         statusText = findViewById(R.id.statusText);
+        CardView cardVision = findViewById(R.id.cardVision);
+        CardView cardNav = findViewById(R.id.cardNav);
+        CardView cardSOS = findViewById(R.id.cardSOS);
 
-        // 2. Setup Text-to-Speech (The App's Voice)
+        // Update UI to show instructions
+        statusText.setText("TAP SCREEN TO SPEAK");
+
+        // 3. Setup Voice Feedback
         textToSpeech = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech.setLanguage(Locale.US);
-                speak("Vision Stick Ready. Tap anywhere and say a command.");
+                // We removed the automatic restart logic here
             }
         });
 
-        // 3. Setup Speech Recognizer (The App's Ears)
+        // 4. Setup Ear (Single Shot Recognition)
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
 
         speechRecognizer.setRecognitionListener(new RecognitionListener() {
-            @Override
-            public void onReadyForSpeech(Bundle params) {
+            @Override public void onReadyForSpeech(Bundle params) {
                 statusText.setText("LISTENING...");
-                statusText.setTextColor(getResources().getColor(R.color.neon_blue));
+                isListening = true;
             }
-
-            @Override
-            public void onResults(Bundle results) {
+            @Override public void onEndOfSpeech() {
+                statusText.setText("PROCESSING...");
+                isListening = false;
+            }
+            @Override public void onError(int error) {
+                statusText.setText("TAP SCREEN TO SPEAK");
+                isListening = false;
+                // Do NOT restart listening automatically
+            }
+            @Override public void onResults(Bundle results) {
+                isListening = false;
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
-                    String command = matches.get(0).toLowerCase();
-                    processCommand(command);
+                    processCommand(matches.get(0).toLowerCase());
+                } else {
+                    statusText.setText("TAP SCREEN TO SPEAK");
                 }
             }
-
-            @Override
-            public void onBeginningOfSpeech() {}
-            @Override
-            public void onRmsChanged(float rmsdB) {}
-            @Override
-            public void onBufferReceived(byte[] buffer) {}
-            @Override
-            public void onEndOfSpeech() {
-                statusText.setText("PROCESSING...");
-            }
-            @Override
-            public void onError(int error) {
-                speak("I didn't catch that. Tap and try again.");
-                statusText.setText("ERROR");
-            }
-            @Override
-            public void onEvent(int eventType, Bundle params) {}
-            @Override
-            public void onPartialResults(Bundle partialResults) {}
+            @Override public void onBeginningOfSpeech() {}
+            @Override public void onRmsChanged(float rmsdB) {}
+            @Override public void onBufferReceived(byte[] buffer) {}
+            @Override public void onPartialResults(Bundle partialResults) {}
+            @Override public void onEvent(int eventType, Bundle params) {}
         });
 
-        // 4. THE MAGIC: Make the WHOLE screen a button
-        // We find the root layout (the background) and listen for clicks
-        View rootView = findViewById(android.R.id.content);
-        rootView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        // 5. Button Logic
+        cardVision.setOnClickListener(v -> openVisionMode());
+        cardNav.setOnClickListener(v -> speak("Navigation coming soon."));
+        cardSOS.setOnClickListener(v -> speak("Emergency alert sent."));
+
+        // 6. TAP TO SPEAK (This simulates your future Physical Stick Button)
+        findViewById(R.id.rootLayout).setOnClickListener(v -> {
+            if (!isListening) {
                 startListening();
             }
         });
     }
 
     private void startListening() {
-        speak("Listening"); // Auditory cue
-        // Small delay to let the app finish speaking "Listening" before recording
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) { e.printStackTrace(); }
+        if (speechRecognizer != null) {
+            // Stop any TTS to clear the air for listening
+            if (textToSpeech != null && textToSpeech.isSpeaking()) {
+                textToSpeech.stop();
+            }
+            speechRecognizer.startListening(speechIntent);
+        }
+    }
 
-        speechRecognizer.startListening(speechIntent);
+    private void openVisionMode() {
+        speak("Opening Vision.");
+        startActivity(new Intent(MainActivity.this, VisionActivity.class));
     }
 
     private void processCommand(String command) {
         statusText.setText("CMD: " + command.toUpperCase());
 
-        if (command.contains("vision") || command.contains("see") || command.contains("eyes")) {
-            speak("Opening Vision Mode");
-            // Intent to open VisionActivity (we will code this next)
-            Intent intent = new Intent(MainActivity.this, VisionActivity.class);
+        // TRIGGER: "What am I looking at"
+        if (command.contains("what") || command.contains("describe") || command.contains("scan") || command.contains("looking")) {
+            speak("Scanning...");
+            Intent intent = new Intent(this, VisionActivity.class);
+            intent.putExtra("TRIGGER_GEMINI", true);
             startActivity(intent);
         }
-        else if (command.contains("navigate") || command.contains("map") || command.contains("go")) {
-            speak("Navigation Mode. Where do you want to go?");
-            // Logic for maps
+        else if (command.contains("vision")) {
+            openVisionMode();
         }
-        else if (command.contains("help") || command.contains("sos") || command.contains("emergency")) {
-            speak("Sending Emergency Alert");
-            // Logic for SOS
+        else if (command.contains("help") || command.contains("sos")) {
+            speak("Alerting emergency services.");
         }
         else {
-            speak("Command not recognized. Try saying Vision, Navigate, or Help.");
+            speak("Unknown command.");
+            statusText.setText("TAP SCREEN TO SPEAK");
         }
     }
 
